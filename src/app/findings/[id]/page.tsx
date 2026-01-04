@@ -164,6 +164,19 @@ Please help me decide if this should be added to my Project Bible (~PROJECT_BIBL
           <p className="text-gray-200">{finding.summary}</p>
         </div>
 
+        {/* Original Content */}
+        {finding.original_content && (
+          <div className="mb-6">
+            <h2 className="text-sm text-gray-400 mb-1">Original Content</h2>
+            <blockquote className="border-l-3 border-accent pl-4 py-2 bg-background rounded-r-lg text-gray-300 italic">
+              "{finding.original_content}"
+              <div className="text-sm text-gray-500 mt-2 not-italic">
+                — {finding.source_author || finding.source_type}
+              </div>
+            </blockquote>
+          </div>
+        )}
+
         {/* Proposed Section */}
         <div className="mb-6">
           <h2 className="text-sm text-gray-400 mb-1">Proposed Project Bible Section</h2>

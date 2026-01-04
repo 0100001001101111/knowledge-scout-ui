@@ -12,6 +12,7 @@ export type Finding = {
   source_author: string | null
   title: string
   summary: string
+  original_content: string | null
   code_snippet: string | null
   category: string
   quality_rating: 'verified' | 'tested' | 'theoretical'
