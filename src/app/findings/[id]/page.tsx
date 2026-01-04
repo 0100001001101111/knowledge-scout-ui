@@ -164,6 +164,14 @@ Please help me decide if this should be added to my Project Bible (~PROJECT_BIBL
           <p className="text-gray-200">{finding.summary}</p>
         </div>
 
+        {/* Proposed Section */}
+        <div className="mb-6">
+          <h2 className="text-sm text-gray-400 mb-1">Proposed Project Bible Section</h2>
+          <span className="inline-block bg-accent/20 text-accent px-3 py-1 rounded text-sm font-medium">
+            {categoryLabels[finding.category] || finding.category}
+          </span>
+        </div>
+
         {/* Code Snippet */}
         {finding.code_snippet && (
           <div className="mb-6">
