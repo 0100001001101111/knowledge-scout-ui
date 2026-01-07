@@ -2,6 +2,8 @@
 
 A terminal-styled web interface for managing Claude Code tips and techniques discovered from various sources. Approved findings can be merged directly into a GitHub-hosted PROJECT_BIBLE.md.
 
+**Live**: https://knowledge-scout-ui.vercel.app
+
 ## Tech Stack
 
 - **Framework**: Next.js 16 (App Router)
@@ -10,6 +12,7 @@ A terminal-styled web interface for managing Claude Code tips and techniques dis
 - **AI**: Anthropic Claude API (for auto-enrichment)
 - **Deployment**: Vercel
 - **GitHub Integration**: REST API for committing to project-bible repo
+- **Automation**: Supabase Edge Function + pg_cron
 
 ## Project Structure
 
@@ -82,11 +85,31 @@ BIBLE_FILE_PATH=PROJECT_BIBLE.md
 4. For sparse findings, click [ENRICH] to auto-extract fields with Claude
 5. Click [ADD TO PROJECT BIBLE] to preview and merge to GitHub
 
+## Automated Scanning
+
+**Edge Function**: `knowledge-scout`
+- URL: `https://diwkdydpjakvwmzyijrk.supabase.co/functions/v1/knowledge-scout`
+- Scans: Hacker News (Algolia API), GitHub Issues (anthropics/claude-code)
+- Stores findings in `knowledge_findings` table with deduplication
+
+**Cron Schedule**: `0 3 * * *` (3:00 AM UTC daily)
+- Job name: `knowledge-scout-daily`
+- Uses pg_cron + pg_net to call edge function
+
+**Manual Trigger**:
+- UI: "Run Scout Now" button on /scan page
+- CLI: `curl https://diwkdydpjakvwmzyijrk.supabase.co/functions/v1/knowledge-scout`
+
+**Limitations**:
+- Automated scan only covers HN + GitHub (free APIs)
+- Twitter/Reddit require manual Claude Code scan (uses WebSearch)
+
 ## Related Files
 
-- `~/.claude/agents/knowledge-scout.md` - Scanner agent definition
-- `~/.claude/agents/knowledge-scout-runner.md` - Runner prompts
-- `0100001001101111/project-bible` repo - Target for merged findings
+- `~/.claude/agents/knowledge-scout.md` - Full scanner agent definition (Twitter, Reddit, etc.)
+- `~/NEW_FINDINGS.md` - Latest scan digest
+- `~/PROJECT_BIBLE.md` - Master knowledge document
+- `0100001001101111/project-bible` repo - GitHub target for merged findings
 
 ## Commands
 
@@ -94,4 +117,7 @@ BIBLE_FILE_PATH=PROJECT_BIBLE.md
 npm run dev      # Local development
 npm run build    # Production build
 npx vercel deploy --prod  # Deploy to Vercel
+
+# Test edge function
+curl https://diwkdydpjakvwmzyijrk.supabase.co/functions/v1/knowledge-scout
 ```

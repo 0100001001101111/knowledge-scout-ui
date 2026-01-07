@@ -3,9 +3,13 @@
 import { useEffect, useState } from 'react'
 import { supabase, ScanHistory } from '@/lib/supabase'
 
+const EDGE_FUNCTION_URL = 'https://diwkdydpjakvwmzyijrk.supabase.co/functions/v1/knowledge-scout'
+
 export default function ScanPage() {
   const [scans, setScans] = useState<ScanHistory[]>([])
   const [loading, setLoading] = useState(true)
+  const [scanning, setScanning] = useState(false)
+  const [scanResult, setScanResult] = useState<{ found: number; stored: number } | null>(null)
   const [stats, setStats] = useState({ total: 0, pending: 0 })
 
   useEffect(() => {
@@ -42,6 +46,23 @@ export default function ScanPage() {
   const daysSinceLastScan = lastScan
     ? Math.floor((Date.now() - new Date(lastScan.scan_date).getTime()) / (1000 * 60 * 60 * 24))
     : null
+
+  async function runScoutNow() {
+    setScanning(true)
+    setScanResult(null)
+    try {
+      const res = await fetch(EDGE_FUNCTION_URL)
+      const data = await res.json()
+      setScanResult(data)
+      // Reload data to show new findings
+      await loadData()
+    } catch (err) {
+      console.error('Scout scan failed:', err)
+      alert('Scan failed. Check console for details.')
+    } finally {
+      setScanning(false)
+    }
+  }
 
   function copyScanPrompt() {
     const prompt = `Run the Knowledge Scout agent from ~/.claude/agents/knowledge-scout.md
@@ -98,23 +119,34 @@ export default function ScanPage() {
       <div className="bg-surface border border-border rounded-lg p-6 mb-8">
         <h2 className="text-lg font-medium mb-4">Run New Scan</h2>
         <p className="text-gray-400 text-sm mb-4">
-          The Knowledge Scout scans Twitter, Reddit, GitHub, and Hacker News for new Claude Code tips and techniques.
-          Copy the scan prompt below and run it in Claude Code.
+          The Knowledge Scout scans GitHub and Hacker News for new Claude Code tips.
+          Runs automatically at 3am UTC daily, or trigger manually below.
         </p>
-        <div className="flex gap-3">
+
+        {scanResult && (
+          <div className="mb-4 p-3 bg-green-900/30 border border-green-500/50 rounded text-green-400 text-sm">
+            Scan complete: Found {scanResult.found} items, stored {scanResult.stored} new findings
+          </div>
+        )}
+
+        <div className="flex gap-3 flex-wrap">
+          <button
+            onClick={runScoutNow}
+            disabled={scanning}
+            className="px-4 py-2 bg-accent hover:bg-accent-dim text-black rounded font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {scanning ? 'Scanning...' : 'Run Scout Now'}
+          </button>
           <button
             onClick={copyScanPrompt}
-            className="px-4 py-2 bg-accent hover:bg-accent-dim text-black rounded font-medium transition-colors"
-          >
-            Copy Scan Prompt
-          </button>
-          <button
-            onClick={() => navigator.clipboard.writeText('Run Knowledge Scout --force')}
             className="px-4 py-2 bg-surface-hover border border-border hover:border-accent/50 rounded transition-colors"
           >
-            Copy Force Scan
+            Copy Full Scan Prompt
           </button>
         </div>
+        <p className="text-gray-500 text-xs mt-3">
+          Note: "Run Scout Now" scans HN + GitHub only. Use "Full Scan Prompt" in Claude Code for Twitter/Reddit.
+        </p>
       </div>
 
       {/* Scan History */}
