@@ -59,7 +59,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=        # Optional, for server-side
 ANTHROPIC_API_KEY=                # For auto-enrichment
 GITHUB_TOKEN=                     # For merge-to-bible
-GITHUB_OWNER=bobrothers
+GITHUB_OWNER=0100001001101111
 GITHUB_REPO=project-bible
 BIBLE_FILE_PATH=PROJECT_BIBLE.md
 ```
@@ -86,7 +86,7 @@ BIBLE_FILE_PATH=PROJECT_BIBLE.md
 
 - `~/.claude/agents/knowledge-scout.md` - Scanner agent definition
 - `~/.claude/agents/knowledge-scout-runner.md` - Runner prompts
-- `bobrothers/project-bible` repo - Target for merged findings
+- `0100001001101111/project-bible` repo - Target for merged findings
 
 ## Commands
 

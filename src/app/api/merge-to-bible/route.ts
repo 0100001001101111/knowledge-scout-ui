@@ -6,7 +6,7 @@ const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PU
 const supabase = createClient(supabaseUrl, supabaseKey)
 
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN!
-const GITHUB_OWNER = process.env.GITHUB_OWNER || 'bobrothers'
+const GITHUB_OWNER = process.env.GITHUB_OWNER || '0100001001101111'
 const GITHUB_REPO = process.env.GITHUB_REPO || 'project-bible'
 const FILE_PATH = process.env.BIBLE_FILE_PATH || 'PROJECT_BIBLE.md'
 
