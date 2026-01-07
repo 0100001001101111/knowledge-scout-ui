@@ -12,6 +12,8 @@ export type Finding = {
   source_author: string | null
   title: string
   summary: string
+  usage: string | null
+  details: string | null
   original_content: string | null
   code_snippet: string | null
   category: string

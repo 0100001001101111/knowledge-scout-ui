@@ -5,11 +5,11 @@ import { useParams, useRouter } from 'next/navigation'
 import { supabase, Finding } from '@/lib/supabase'
 import Link from 'next/link'
 
-const statusColors: Record<string, string> = {
-  pending_review: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/50',
-  approved: 'bg-green-500/20 text-green-400 border-green-500/50',
-  rejected: 'bg-red-500/20 text-red-400 border-red-500/50',
-  merged: 'bg-accent/20 text-accent border-accent/50',
+const statusLabels: Record<string, { text: string; class: string }> = {
+  pending_review: { text: '[PENDING]', class: 'text-amber' },
+  approved: { text: '[APPROVED]', class: 'text-green' },
+  rejected: { text: '[REJECTED]', class: 'text-red' },
+  merged: { text: '[MERGED]', class: 'text-accent' },
 }
 
 const categoryLabels: Record<string, string> = {
@@ -24,6 +24,30 @@ const categoryLabels: Record<string, string> = {
   other: 'Other',
 }
 
+type Toast = {
+  type: 'success' | 'error'
+  message: string
+  link?: string
+}
+
+type MergePreview = {
+  section: string
+  formattedContent: string
+  isEnriched: boolean
+  finding: {
+    id: string
+    title: string
+    summary: string
+    usage: string | null
+    details: string | null
+    code_snippet: string | null
+    original_content: string | null
+    source_url: string | null
+    source_author: string | null
+    category: string
+  }
+}
+
 export default function FindingDetailPage() {
   const params = useParams()
   const router = useRouter()
@@ -32,9 +56,31 @@ export default function FindingDetailPage() {
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
 
+  // Merge state
+  const [showMergeModal, setShowMergeModal] = useState(false)
+  const [mergePreview, setMergePreview] = useState<MergePreview | null>(null)
+  const [merging, setMerging] = useState(false)
+  const [toast, setToast] = useState<Toast | null>(null)
+
+  // Enrich state
+  const [enrichMode, setEnrichMode] = useState(false)
+  const [enriching, setEnriching] = useState(false)
+  const [editUsage, setEditUsage] = useState('')
+  const [editDetails, setEditDetails] = useState('')
+  const [editCodeSnippet, setEditCodeSnippet] = useState('')
+  const [editSummary, setEditSummary] = useState('')
+
   useEffect(() => {
     loadFinding()
   }, [params.id])
+
+  // Auto-hide toast after 5 seconds
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 5000)
+      return () => clearTimeout(timer)
+    }
+  }, [toast])
 
   async function loadFinding() {
     const { data, error } = await supabase
@@ -48,6 +94,11 @@ export default function FindingDetailPage() {
     } else {
       setFinding(data)
       setNotes(data.rejection_reason || '')
+      // Initialize edit fields
+      setEditSummary(data.summary || '')
+      setEditUsage(data.usage || '')
+      setEditDetails(data.details || '')
+      setEditCodeSnippet(data.code_snippet || '')
     }
     setLoading(false)
   }
@@ -67,37 +118,151 @@ export default function FindingDetailPage() {
 
     if (error) {
       console.error('Error updating:', error)
-      alert('Failed to update')
+      setToast({ type: 'error', message: 'Failed to update status' })
     } else {
       await loadFinding()
+      setToast({ type: 'success', message: `Status updated to ${status}` })
     }
     setSaving(false)
   }
 
+  async function saveEnrichment() {
+    if (!finding) return
+    setSaving(true)
+
+    const { error } = await supabase
+      .from('knowledge_findings')
+      .update({
+        summary: editSummary,
+        usage: editUsage || null,
+        details: editDetails || null,
+        code_snippet: editCodeSnippet || null,
+      })
+      .eq('id', finding.id)
+
+    if (error) {
+      console.error('Error saving:', error)
+      setToast({ type: 'error', message: 'Failed to save' })
+    } else {
+      await loadFinding()
+      setEnrichMode(false)
+      setToast({ type: 'success', message: 'Finding enriched!' })
+    }
+    setSaving(false)
+  }
+
+  async function openMergePreview() {
+    if (!finding) return
+
+    try {
+      const response = await fetch(`/api/merge-to-bible?findingId=${finding.id}`)
+      const data = await response.json()
+
+      if (data.success) {
+        setMergePreview(data.preview)
+        setShowMergeModal(true)
+      } else {
+        setToast({ type: 'error', message: data.error || 'Failed to load preview' })
+      }
+    } catch (error) {
+      setToast({ type: 'error', message: 'Failed to load preview' })
+    }
+  }
+
+  async function confirmMerge() {
+    if (!finding) return
+    setMerging(true)
+
+    try {
+      const response = await fetch('/api/merge-to-bible', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ findingId: finding.id }),
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        setShowMergeModal(false)
+        setToast({
+          type: 'success',
+          message: 'Merged to Project Bible!',
+          link: data.commitUrl,
+        })
+        await loadFinding()
+      } else {
+        setToast({ type: 'error', message: data.error || 'Merge failed' })
+      }
+    } catch (error) {
+      setToast({ type: 'error', message: 'Merge failed - network error' })
+    }
+
+    setMerging(false)
+  }
+
+  async function autoEnrich() {
+    if (!finding) return
+    setEnriching(true)
+    setToast({ type: 'success', message: 'Extracting content with Claude...' })
+
+    try {
+      const response = await fetch('/api/enrich', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ findingId: finding.id, save: false }),
+      })
+
+      const data = await response.json()
+
+      if (data.success && data.extracted) {
+        // Populate form with extracted content
+        setEditSummary(data.extracted.summary || finding.summary || '')
+        setEditUsage(data.extracted.usage || '')
+        setEditDetails(data.extracted.details || '')
+        setEditCodeSnippet(data.extracted.code_snippet || '')
+        setEnrichMode(true)
+        setToast({
+          type: 'success',
+          message: data.sourceContentFetched
+            ? 'Extracted from source + original content!'
+            : 'Extracted from original content!',
+        })
+      } else {
+        setToast({ type: 'error', message: data.error || 'Failed to enrich' })
+      }
+    } catch (error) {
+      setToast({ type: 'error', message: 'Failed to connect to enrichment service' })
+    }
+
+    setEnriching(false)
+  }
+
   function copyForClaude() {
     if (!finding) return
-    const text = `# Finding to Review: ${finding.title}
+    const text = `# Finding to Enrich: ${finding.title}
 
 **Source:** ${finding.source_url || finding.source_type}
 **Category:** ${categoryLabels[finding.category]}
-**Confidence:** ${finding.quality_rating} (${finding.confidence_score}%)
 
-## Summary
+## Current Summary
 ${finding.summary}
 
-${finding.code_snippet ? `## Code Example
-\`\`\`
-${finding.code_snippet}
-\`\`\`` : ''}
+## Original Content
+${finding.original_content || 'N/A'}
 
 ---
-Please help me decide if this should be added to my Project Bible (~PROJECT_BIBLE.md).
-- Is this actionable and useful?
-- Does it overlap with existing content?
-- Which section should it go in?`
+
+Please help me enrich this finding for my Project Bible. Extract:
+
+1. **Summary** (1-2 sentences - what is this?)
+2. **Usage** (how to use it - commands, code examples)
+3. **Details** (structure, options, configuration if applicable)
+4. **Code snippet** (if there's a good example)
+
+Format your response so I can copy each field into the enrichment form.`
 
     navigator.clipboard.writeText(text)
-    alert('Copied to clipboard!')
+    setToast({ type: 'success', message: 'Copied to clipboard!' })
   }
 
   function openInClaude() {
@@ -106,159 +271,462 @@ Please help me decide if this should be added to my Project Bible (~PROJECT_BIBL
     window.open(`https://claude.ai/new?q=${text}`, '_blank')
   }
 
+  // Check if finding needs enrichment
+  function needsEnrichment(f: Finding): boolean {
+    return !(f.usage || f.code_snippet || f.details)
+  }
+
   if (loading) {
-    return <div className="text-center py-12 text-gray-400">Loading...</div>
+    return (
+      <div className="text-center py-12 text-muted">
+        <span className="loading">Loading finding</span>
+      </div>
+    )
   }
 
   if (!finding) {
-    return <div className="text-center py-12 text-gray-400">Finding not found</div>
+    return (
+      <div className="text-center py-12">
+        <div className="text-red mb-2">[ERROR]</div>
+        <div className="text-muted">Finding not found</div>
+        <Link href="/findings" className="text-accent mt-4 inline-block">
+          ← cd ../findings
+        </Link>
+      </div>
+    )
   }
 
   return (
     <div>
-      <Link href="/findings" className="text-sm text-gray-400 hover:text-accent mb-4 inline-block">
-        ← Back to Findings
-      </Link>
+      {/* Toast notification */}
+      {toast && (
+        <div
+          className={`fixed top-4 right-4 z-50 px-4 py-3 border ${
+            toast.type === 'success'
+              ? 'bg-green/20 border-green text-green'
+              : 'bg-red/20 border-red text-red'
+          }`}
+        >
+          <div className="flex items-center gap-3">
+            <span>{toast.type === 'success' ? '[OK]' : '[ERR]'}</span>
+            <span>{toast.message}</span>
+            {toast.link && (
+              <a
+                href={toast.link}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-accent hover:underline"
+              >
+                View commit →
+              </a>
+            )}
+            <button
+              onClick={() => setToast(null)}
+              className="ml-2 text-muted hover:text-foreground"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
 
-      <div className="bg-surface border border-border rounded-lg p-6">
-        {/* Header */}
-        <div className="flex items-start justify-between mb-4">
-          <div>
-            <h1 className="text-xl font-bold mb-2">{finding.title}</h1>
-            <div className="flex items-center gap-3">
-              <span className={`text-sm px-3 py-1 rounded border ${statusColors[finding.status]}`}>
-                {finding.status.replace('_', ' ')}
-              </span>
-              <span className="text-sm text-gray-400">
-                {categoryLabels[finding.category]}
-              </span>
-              <span className={`text-sm ${finding.quality_rating === 'verified' ? 'text-green-400' : finding.quality_rating === 'tested' ? 'text-yellow-400' : 'text-gray-400'}`}>
-                {finding.quality_rating} ({finding.confidence_score}%)
-              </span>
+      {/* Merge Preview Modal */}
+      {showMergeModal && mergePreview && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-background/80">
+          <div className="bg-surface border border-border p-6 max-w-3xl w-full mx-4 max-h-[85vh] overflow-y-auto">
+            <div className="text-green text-xs mb-4">
+              ┌─ MERGE PREVIEW ─────────────────────────────────────────────┐
+            </div>
+
+            {/* Enrichment warning */}
+            {!mergePreview.isEnriched && (
+              <div className="mb-4 p-3 bg-amber/10 border border-amber text-amber text-sm">
+                <span className="font-bold">[WARN]</span> This finding lacks usage/details. Consider enriching before merge.
+              </div>
+            )}
+
+            <div className="mb-4">
+              <div className="text-muted text-xs mb-1">Target section:</div>
+              <div className="text-accent">{mergePreview.section}</div>
+            </div>
+
+            <div className="mb-4">
+              <div className="text-muted text-xs mb-1">$ cat preview.md</div>
+              <pre className="bg-background border border-border p-4 text-sm overflow-x-auto whitespace-pre-wrap font-mono">
+                {mergePreview.formattedContent}
+              </pre>
+            </div>
+
+            <div className="text-green text-xs mb-4">
+              └──────────────────────────────────────────────────────────────┘
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={confirmMerge}
+                disabled={merging}
+                className="px-4 py-2 bg-green/20 border border-green text-green text-sm hover:bg-green/30 glow-green disabled:opacity-50 flex items-center gap-2"
+              >
+                {merging ? (
+                  <>
+                    <span className="loading"></span>
+                    Merging...
+                  </>
+                ) : (
+                  '[CONFIRM MERGE]'
+                )}
+              </button>
+              {!mergePreview.isEnriched && (
+                <button
+                  onClick={() => {
+                    setShowMergeModal(false)
+                    autoEnrich()
+                  }}
+                  disabled={enriching}
+                  className="px-4 py-2 bg-amber/20 border border-amber text-amber text-sm hover:bg-amber/30 disabled:opacity-50"
+                >
+                  {enriching ? (
+                    <span className="loading">Enriching</span>
+                  ) : (
+                    '[ENRICH FIRST]'
+                  )}
+                </button>
+              )}
+              <button
+                onClick={() => setShowMergeModal(false)}
+                disabled={merging}
+                className="px-4 py-2 bg-surface-hover border border-border text-sm hover:border-muted"
+              >
+                [CANCEL]
+              </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Back link */}
+      <Link href="/findings" className="text-sm text-muted hover:text-green mb-4 inline-block">
+        <span className="text-green">$</span> cd ../findings
+      </Link>
+
+      {/* Main content */}
+      <div className="bg-surface border border-border p-6">
+        {/* Header */}
+        <div className="mb-6">
+          <div className="text-green text-xs mb-2">┌─ FINDING DETAILS ────────────────────────────────────────────┐</div>
+
+          <h1 className="text-lg mb-3 pl-2">
+            <span className="text-muted">│</span> {finding.title}
+          </h1>
+
+          <div className="flex items-center gap-4 text-sm pl-2 flex-wrap">
+            <span className="text-muted">│</span>
+            <span className={statusLabels[finding.status].class}>
+              {statusLabels[finding.status].text}
+            </span>
+            <span className="text-muted">│</span>
+            <span className="text-accent">{categoryLabels[finding.category]}</span>
+            <span className="text-muted">│</span>
+            <span className={
+              finding.confidence_score >= 80 ? 'text-green' :
+              finding.confidence_score >= 60 ? 'text-amber' : 'text-muted'
+            }>
+              {finding.quality_rating} ({finding.confidence_score}%)
+            </span>
+            {needsEnrichment(finding) && (
+              <>
+                <span className="text-muted">│</span>
+                <span className="text-amber">[NEEDS ENRICHMENT]</span>
+              </>
+            )}
+          </div>
+
+          <div className="text-green text-xs mt-2">└──────────────────────────────────────────────────────────────┘</div>
         </div>
 
         {/* Source */}
         <div className="mb-6">
-          <h2 className="text-sm text-gray-400 mb-1">Source</h2>
-          <div className="flex items-center gap-2">
-            <span className="capitalize">{finding.source_type}</span>
-            {finding.source_author && <span className="text-gray-400">by {finding.source_author}</span>}
+          <div className="text-muted text-xs mb-1">$ cat source.txt</div>
+          <div className="bg-background border border-border p-3 text-sm">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-muted">type:</span>
+              <span className="capitalize">{finding.source_type}</span>
+              {finding.source_author && (
+                <>
+                  <span className="text-muted">│ author:</span>
+                  <span>{finding.source_author}</span>
+                </>
+              )}
+            </div>
             {finding.source_url && (
-              <a
-                href={finding.source_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-accent hover:underline text-sm"
-              >
-                View Source →
-              </a>
+              <div className="mt-2">
+                <span className="text-muted">url: </span>
+                <a
+                  href={finding.source_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-accent hover:text-green break-all"
+                >
+                  {finding.source_url}
+                </a>
+              </div>
             )}
           </div>
         </div>
 
-        {/* Summary */}
-        <div className="mb-6">
-          <h2 className="text-sm text-gray-400 mb-1">Summary</h2>
-          <p className="text-gray-200">{finding.summary}</p>
-        </div>
+        {/* Enrich Mode */}
+        {enrichMode ? (
+          <div className="mb-6 p-4 border border-amber bg-amber/5">
+            <div className="text-amber text-xs mb-4">$ ./enrich.sh --interactive</div>
 
-        {/* Original Content */}
-        {finding.original_content && (
-          <div className="mb-6">
-            <h2 className="text-sm text-gray-400 mb-1">Original Content</h2>
-            <blockquote className="border-l-3 border-accent pl-4 py-2 bg-background rounded-r-lg text-gray-300 italic">
-              "{finding.original_content}"
-              <div className="text-sm text-gray-500 mt-2 not-italic">
-                — {finding.source_author || finding.source_type}
+            <div className="space-y-4">
+              <div>
+                <label className="text-muted text-xs block mb-1">Summary (what is this?)</label>
+                <textarea
+                  value={editSummary}
+                  onChange={(e) => setEditSummary(e.target.value)}
+                  className="w-full bg-background border border-border p-3 text-sm resize-none h-20 focus:border-amber"
+                  placeholder="1-2 sentences describing what this is..."
+                />
               </div>
-            </blockquote>
+
+              <div>
+                <label className="text-muted text-xs block mb-1">Usage (how to use it)</label>
+                <textarea
+                  value={editUsage}
+                  onChange={(e) => setEditUsage(e.target.value)}
+                  className="w-full bg-background border border-border p-3 text-sm resize-none h-24 focus:border-amber"
+                  placeholder="Commands, examples, steps..."
+                />
+              </div>
+
+              <div>
+                <label className="text-muted text-xs block mb-1">Code Snippet</label>
+                <textarea
+                  value={editCodeSnippet}
+                  onChange={(e) => setEditCodeSnippet(e.target.value)}
+                  className="w-full bg-background border border-border p-3 text-sm resize-none h-32 font-mono focus:border-amber"
+                  placeholder="Code example..."
+                />
+              </div>
+
+              <div>
+                <label className="text-muted text-xs block mb-1">Details (structure, options, etc.)</label>
+                <textarea
+                  value={editDetails}
+                  onChange={(e) => setEditDetails(e.target.value)}
+                  className="w-full bg-background border border-border p-3 text-sm resize-none h-24 focus:border-amber"
+                  placeholder="Additional details, file structure, configuration options..."
+                />
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={saveEnrichment}
+                  disabled={saving}
+                  className="px-4 py-2 bg-green/20 border border-green text-green text-sm hover:bg-green/30 glow-green disabled:opacity-50"
+                >
+                  {saving ? 'Saving...' : '[SAVE]'}
+                </button>
+                <button
+                  onClick={() => setEnrichMode(false)}
+                  disabled={saving}
+                  className="px-4 py-2 bg-surface-hover border border-border text-sm hover:border-muted"
+                >
+                  [CANCEL]
+                </button>
+                <button
+                  onClick={copyForClaude}
+                  className="px-4 py-2 bg-surface-hover border border-border text-sm hover:border-accent hover:text-accent ml-auto"
+                >
+                  [ASK CLAUDE FOR HELP]
+                </button>
+              </div>
+            </div>
           </div>
+        ) : (
+          <>
+            {/* Summary */}
+            <div className="mb-6">
+              <div className="text-muted text-xs mb-1">$ cat summary.txt</div>
+              <div className="bg-background border border-border p-3 text-sm">
+                {finding.summary}
+              </div>
+            </div>
+
+            {/* Usage */}
+            {finding.usage && (
+              <div className="mb-6">
+                <div className="text-muted text-xs mb-1">$ cat usage.txt</div>
+                <div className="bg-background border border-border p-3 text-sm whitespace-pre-wrap">
+                  {finding.usage}
+                </div>
+              </div>
+            )}
+
+            {/* Code Snippet */}
+            {finding.code_snippet && (
+              <div className="mb-6">
+                <div className="text-muted text-xs mb-1">$ cat example.code</div>
+                <pre className="bg-background border border-border p-3 text-sm overflow-x-auto">
+                  <code>{finding.code_snippet}</code>
+                </pre>
+              </div>
+            )}
+
+            {/* Details */}
+            {finding.details && (
+              <div className="mb-6">
+                <div className="text-muted text-xs mb-1">$ cat details.txt</div>
+                <div className="bg-background border border-border p-3 text-sm whitespace-pre-wrap">
+                  {finding.details}
+                </div>
+              </div>
+            )}
+
+            {/* Original Content */}
+            {finding.original_content && (
+              <div className="mb-6">
+                <div className="text-muted text-xs mb-1">$ cat original.txt</div>
+                <div className="bg-background border border-border p-3 text-sm">
+                  <div className="border-l-2 border-green pl-3 text-muted italic">
+                    &quot;{finding.original_content}&quot;
+                  </div>
+                  <div className="text-xs text-muted mt-2">
+                    — {finding.source_author || finding.source_type}
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
         )}
 
-        {/* Proposed Section */}
+        {/* Metadata */}
         <div className="mb-6">
-          <h2 className="text-sm text-gray-400 mb-1">Proposed Project Bible Section</h2>
-          <span className="inline-block bg-accent/20 text-accent px-3 py-1 rounded text-sm font-medium">
-            {categoryLabels[finding.category] || finding.category}
-          </span>
-        </div>
-
-        {/* Code Snippet */}
-        {finding.code_snippet && (
-          <div className="mb-6">
-            <h2 className="text-sm text-gray-400 mb-1">Code Example</h2>
-            <pre className="bg-background p-4 rounded-lg overflow-x-auto text-sm">
-              <code>{finding.code_snippet}</code>
-            </pre>
+          <div className="text-muted text-xs mb-1">$ stat finding.meta</div>
+          <div className="bg-background border border-border p-3 text-xs">
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <span className="text-muted">discovered:</span>{' '}
+                {new Date(finding.scan_date).toLocaleString()}
+              </div>
+              <div>
+                <span className="text-muted">target_section:</span>{' '}
+                <span className="text-accent">{categoryLabels[finding.category]}</span>
+              </div>
+              {finding.merged_at && (
+                <div>
+                  <span className="text-muted">merged:</span>{' '}
+                  {new Date(finding.merged_at).toLocaleString()}
+                </div>
+              )}
+            </div>
           </div>
-        )}
-
-        {/* Dates */}
-        <div className="mb-6 text-sm text-gray-400">
-          <div>Discovered: {new Date(finding.scan_date).toLocaleString()}</div>
-          {finding.merged_at && (
-            <div>Merged: {new Date(finding.merged_at).toLocaleString()}</div>
-          )}
         </div>
 
         {/* Notes */}
-        <div className="mb-6">
-          <h2 className="text-sm text-gray-400 mb-1">Notes</h2>
-          <textarea
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="Add notes about this finding..."
-            className="w-full bg-background border border-border rounded-lg p-3 text-sm resize-none h-24"
-          />
-        </div>
+        {!enrichMode && (
+          <div className="mb-6">
+            <div className="text-muted text-xs mb-1">$ vim notes.txt</div>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Add notes about this finding..."
+              className="w-full bg-background border border-border p-3 text-sm resize-none h-24 focus:border-green"
+            />
+          </div>
+        )}
 
         {/* Actions */}
-        <div className="flex flex-wrap gap-3 pt-4 border-t border-border">
-          {finding.status === 'pending_review' && (
-            <>
+        {!enrichMode && (
+          <div className="pt-4 border-t border-border">
+            <div className="text-muted text-xs mb-3">$ ./actions.sh</div>
+
+            <div className="flex flex-wrap gap-3">
+              {/* Pending review actions */}
+              {finding.status === 'pending_review' && (
+                <>
+                  <button
+                    onClick={() => updateStatus('approved')}
+                    disabled={saving}
+                    className="px-4 py-2 bg-green/20 border border-green text-green text-sm hover:bg-green/30 glow-green disabled:opacity-50"
+                  >
+                    [APPROVE]
+                  </button>
+                  <button
+                    onClick={() => updateStatus('rejected', notes)}
+                    disabled={saving}
+                    className="px-4 py-2 bg-red/20 border border-red text-red text-sm hover:bg-red/30 glow-red disabled:opacity-50"
+                  >
+                    [REJECT]
+                  </button>
+                </>
+              )}
+
+              {/* Approved - show merge button */}
+              {finding.status === 'approved' && (
+                <button
+                  onClick={openMergePreview}
+                  disabled={saving}
+                  className="px-4 py-2 bg-green/20 border border-green text-green text-sm hover:bg-green/30 glow-green disabled:opacity-50"
+                >
+                  [ADD TO PROJECT BIBLE]
+                </button>
+              )}
+
+              {/* Merged - show confirmation */}
+              {finding.status === 'merged' && (
+                <span className="px-4 py-2 bg-accent/20 border border-accent text-accent text-sm cursor-default">
+                  [ADDED TO BIBLE ✓]
+                </span>
+              )}
+
+              {/* Enrich button - show if not merged and needs enrichment */}
+              {finding.status !== 'merged' && needsEnrichment(finding) && (
+                <button
+                  onClick={autoEnrich}
+                  disabled={enriching}
+                  className="px-4 py-2 bg-amber/20 border border-amber text-amber text-sm hover:bg-amber/30 disabled:opacity-50"
+                >
+                  {enriching ? (
+                    <span className="loading">Enriching</span>
+                  ) : (
+                    '[ENRICH]'
+                  )}
+                </button>
+              )}
+
+              {/* Edit button - show if not merged and already enriched */}
+              {finding.status !== 'merged' && !needsEnrichment(finding) && (
+                <button
+                  onClick={() => setEnrichMode(true)}
+                  className="px-4 py-2 bg-surface-hover border border-border text-sm hover:border-accent hover:text-accent"
+                >
+                  [EDIT]
+                </button>
+              )}
+
               <button
-                onClick={() => updateStatus('approved')}
-                disabled={saving}
-                className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded text-sm font-medium transition-colors disabled:opacity-50"
+                onClick={copyForClaude}
+                className="px-4 py-2 bg-surface-hover border border-border text-sm hover:border-accent hover:text-accent"
               >
-                ✓ Approve
+                [COPY FOR CLAUDE]
               </button>
+
               <button
-                onClick={() => updateStatus('rejected', notes)}
-                disabled={saving}
-                className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded text-sm font-medium transition-colors disabled:opacity-50"
+                onClick={openInClaude}
+                className="px-4 py-2 bg-surface-hover border border-border text-sm hover:border-accent hover:text-accent"
               >
-                ✗ Reject
+                [OPEN IN CLAUDE →]
               </button>
-            </>
-          )}
+            </div>
+          </div>
+        )}
+      </div>
 
-          {finding.status === 'approved' && (
-            <button
-              onClick={() => updateStatus('merged')}
-              disabled={saving}
-              className="px-4 py-2 bg-accent hover:bg-accent-dim rounded text-black text-sm font-medium transition-colors disabled:opacity-50"
-            >
-              Add to Project Bible
-            </button>
-          )}
-
-          <button
-            onClick={copyForClaude}
-            className="px-4 py-2 bg-surface-hover border border-border hover:border-accent/50 rounded text-sm transition-colors"
-          >
-            Copy for Claude
-          </button>
-
-          <button
-            onClick={openInClaude}
-            className="px-4 py-2 bg-surface-hover border border-border hover:border-accent/50 rounded text-sm transition-colors"
-          >
-            Discuss with Claude →
-          </button>
-        </div>
+      {/* Footer */}
+      <div className="mt-4 text-xs text-muted">
+        <span className="text-green">$</span> id: {finding.id}
       </div>
     </div>
   )

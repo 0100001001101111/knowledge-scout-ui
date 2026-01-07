@@ -4,32 +4,32 @@ import { useEffect, useState } from 'react'
 import { supabase, Finding } from '@/lib/supabase'
 import Link from 'next/link'
 
-const sourceIcons: Record<string, string> = {
-  twitter: '𝕏',
-  reddit: '🔴',
-  github: '⬛',
-  hackernews: '🟠',
-  discord: '💬',
-  other: '📄',
+const sourceLabels: Record<string, string> = {
+  twitter: 'TWTR',
+  reddit: 'RDDT',
+  github: 'GH',
+  hackernews: 'HN',
+  discord: 'DISC',
+  other: 'OTHER',
 }
 
-const statusColors: Record<string, string> = {
-  pending_review: 'bg-yellow-500/20 text-yellow-400',
-  approved: 'bg-green-500/20 text-green-400',
-  rejected: 'bg-red-500/20 text-red-400',
-  merged: 'bg-accent/20 text-accent',
+const statusLabels: Record<string, { text: string; class: string }> = {
+  pending_review: { text: '[PENDING]', class: 'text-amber' },
+  approved: { text: '[APPROVED]', class: 'text-green' },
+  rejected: { text: '[REJECTED]', class: 'text-red' },
+  merged: { text: '[MERGED]', class: 'text-accent' },
 }
 
 const categoryLabels: Record<string, string> = {
-  new_features: 'New Features',
-  prompting_techniques: 'Prompting',
-  sub_agents: 'Sub-Agents',
-  mcp_servers: 'MCP Servers',
-  workflow_tips: 'Workflow',
-  configuration: 'Config',
-  common_mistakes: 'Mistakes',
-  performance: 'Performance',
-  other: 'Other',
+  new_features: 'features',
+  prompting_techniques: 'prompting',
+  sub_agents: 'agents',
+  mcp_servers: 'mcp',
+  workflow_tips: 'workflow',
+  configuration: 'config',
+  common_mistakes: 'mistakes',
+  performance: 'perf',
+  other: 'other',
 }
 
 export default function FindingsPage() {
@@ -82,117 +82,150 @@ export default function FindingsPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">Findings</h1>
-        <div className="flex gap-4 text-sm">
-          <span className="text-gray-400">Total: {stats.total}</span>
-          <span className="text-yellow-400">Pending: {stats.pending}</span>
-          <span className="text-green-400">Approved: {stats.approved}</span>
-          <span className="text-accent">Merged: {stats.merged}</span>
+      {/* Header with stats */}
+      <div className="mb-6">
+        <div className="text-green mb-2">┌─ FINDINGS DATABASE ─────────────────────────────────────────┐</div>
+        <div className="flex items-center gap-6 text-sm pl-2">
+          <span className="text-muted">│</span>
+          <span>total: <span className="text-foreground">{stats.total}</span></span>
+          <span className="text-amber">pending: {stats.pending}</span>
+          <span className="text-green">approved: {stats.approved}</span>
+          <span className="text-accent">merged: {stats.merged}</span>
         </div>
+        <div className="text-green mt-2">└──────────────────────────────────────────────────────────────┘</div>
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-4 mb-6 p-4 bg-surface rounded-lg border border-border">
-        <div>
-          <label className="text-xs text-gray-400 block mb-1">Status</label>
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="bg-background border border-border rounded px-3 py-1.5 text-sm"
-          >
-            <option value="all">All</option>
-            <option value="pending_review">Pending</option>
-            <option value="approved">Approved</option>
-            <option value="rejected">Rejected</option>
-            <option value="merged">Merged</option>
-          </select>
-        </div>
-        <div>
-          <label className="text-xs text-gray-400 block mb-1">Source</label>
-          <select
-            value={sourceFilter}
-            onChange={(e) => setSourceFilter(e.target.value)}
-            className="bg-background border border-border rounded px-3 py-1.5 text-sm"
-          >
-            <option value="all">All</option>
-            <option value="twitter">Twitter</option>
-            <option value="reddit">Reddit</option>
-            <option value="github">GitHub</option>
-            <option value="hackernews">Hacker News</option>
-            <option value="other">Other</option>
-          </select>
-        </div>
-        <div>
-          <label className="text-xs text-gray-400 block mb-1">Category</label>
-          <select
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value)}
-            className="bg-background border border-border rounded px-3 py-1.5 text-sm"
-          >
-            <option value="all">All</option>
-            {Object.entries(categoryLabels).map(([key, label]) => (
-              <option key={key} value={key}>{label}</option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="text-xs text-gray-400 block mb-1">Sort</label>
-          <select
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as 'date' | 'confidence')}
-            className="bg-background border border-border rounded px-3 py-1.5 text-sm"
-          >
-            <option value="date">Newest First</option>
-            <option value="confidence">Highest Confidence</option>
-          </select>
+      <div className="mb-6 p-4 bg-surface border border-border">
+        <div className="text-muted text-xs mb-3">$ filter --options</div>
+        <div className="flex flex-wrap gap-4">
+          <div>
+            <label className="text-xs text-muted block mb-1">--status</label>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="px-3 py-1.5 text-sm min-w-[140px]"
+            >
+              <option value="all">*</option>
+              <option value="pending_review">pending</option>
+              <option value="approved">approved</option>
+              <option value="rejected">rejected</option>
+              <option value="merged">merged</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-muted block mb-1">--source</label>
+            <select
+              value={sourceFilter}
+              onChange={(e) => setSourceFilter(e.target.value)}
+              className="px-3 py-1.5 text-sm min-w-[140px]"
+            >
+              <option value="all">*</option>
+              <option value="twitter">twitter</option>
+              <option value="reddit">reddit</option>
+              <option value="github">github</option>
+              <option value="hackernews">hackernews</option>
+              <option value="other">other</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-muted block mb-1">--category</label>
+            <select
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              className="px-3 py-1.5 text-sm min-w-[140px]"
+            >
+              <option value="all">*</option>
+              {Object.entries(categoryLabels).map(([key, label]) => (
+                <option key={key} value={key}>{label}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-muted block mb-1">--sort</label>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as 'date' | 'confidence')}
+              className="px-3 py-1.5 text-sm min-w-[140px]"
+            >
+              <option value="date">date:desc</option>
+              <option value="confidence">confidence:desc</option>
+            </select>
+          </div>
         </div>
       </div>
 
       {/* Findings List */}
       {loading ? (
-        <div className="text-center py-12 text-gray-400">Loading...</div>
+        <div className="text-center py-12 text-muted">
+          <span className="loading">Loading findings</span>
+        </div>
       ) : findings.length === 0 ? (
-        <div className="text-center py-12 text-gray-400">No findings found</div>
+        <div className="text-center py-12 text-muted">
+          <div>No findings match query.</div>
+          <div className="text-xs mt-2">Try adjusting filters.</div>
+        </div>
       ) : (
-        <div className="space-y-3">
-          {findings.map((finding) => (
+        <div className="space-y-1">
+          {/* Table header */}
+          <div className="grid grid-cols-[80px_1fr_100px_80px_100px] gap-2 text-xs text-muted px-3 py-2 border-b border-border">
+            <span>SOURCE</span>
+            <span>TITLE</span>
+            <span>CATEGORY</span>
+            <span>CONF</span>
+            <span>STATUS</span>
+          </div>
+
+          {/* Findings rows */}
+          {findings.map((finding, index) => (
             <Link
               key={finding.id}
               href={`/findings/${finding.id}`}
-              className="block bg-surface border border-border rounded-lg p-4 hover:border-accent/50 transition-colors"
+              className="grid grid-cols-[80px_1fr_100px_80px_100px] gap-2 items-center px-3 py-2 hover:bg-surface-hover border-l-2 border-transparent hover:border-green transition-all group"
             >
-              <div className="flex items-start gap-4">
-                <span className="text-2xl" title={finding.source_type}>
-                  {sourceIcons[finding.source_type]}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <h3 className="font-medium truncate">{finding.title}</h3>
-                    <span className={`text-xs px-2 py-0.5 rounded ${statusColors[finding.status]}`}>
-                      {finding.status.replace('_', ' ')}
-                    </span>
-                  </div>
-                  <p className="text-sm text-gray-400 line-clamp-2 mb-2">
-                    {finding.summary}
-                  </p>
-                  <div className="flex items-center gap-4 text-xs text-gray-500">
-                    <span className="bg-surface-hover px-2 py-0.5 rounded">
-                      {categoryLabels[finding.category] || finding.category}
-                    </span>
-                    <span className={finding.quality_rating === 'verified' ? 'text-green-400' : finding.quality_rating === 'tested' ? 'text-yellow-400' : 'text-gray-400'}>
-                      {finding.quality_rating} ({finding.confidence_score}%)
-                    </span>
-                    <span>
-                      {new Date(finding.scan_date).toLocaleDateString()}
-                    </span>
-                  </div>
+              {/* Source */}
+              <span className="text-xs text-muted">
+                [{sourceLabels[finding.source_type]}]
+              </span>
+
+              {/* Title */}
+              <div className="min-w-0">
+                <div className="truncate group-hover:text-green transition-colors">
+                  {finding.title}
+                </div>
+                <div className="text-xs text-muted truncate mt-0.5">
+                  {finding.summary.slice(0, 60)}...
                 </div>
               </div>
+
+              {/* Category */}
+              <span className="text-xs text-accent">
+                {categoryLabels[finding.category] || finding.category}
+              </span>
+
+              {/* Confidence */}
+              <span className={`text-xs ${
+                finding.confidence_score >= 80 ? 'text-green' :
+                finding.confidence_score >= 60 ? 'text-amber' : 'text-muted'
+              }`}>
+                {finding.confidence_score}%
+              </span>
+
+              {/* Status */}
+              <span className={`text-xs ${statusLabels[finding.status].class}`}>
+                {statusLabels[finding.status].text}
+              </span>
             </Link>
           ))}
         </div>
       )}
+
+      {/* Footer */}
+      <div className="mt-6 pt-4 border-t border-border text-xs text-muted">
+        <span className="text-green">$</span> Showing {findings.length} findings
+        <span className="text-muted ml-4">│</span>
+        <span className="ml-4">Last updated: {new Date().toLocaleTimeString()}</span>
+      </div>
     </div>
   )
 }

@@ -1,32 +1,269 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --color-background: #0a0a0a;
-  --color-foreground: #ededed;
-  --color-accent: #f59e0b;
-  --color-accent-dim: #d97706;
-  --color-surface: #141414;
-  --color-surface-hover: #1f1f1f;
-  --color-border: #2a2a2a;
+  --color-background: #0d1117;
+  --color-foreground: #c9d1d9;
+  --color-accent: #58a6ff;
+  --color-green: #3fb950;
+  --color-amber: #d29922;
+  --color-red: #f85149;
+  --color-surface: #161b22;
+  --color-surface-hover: #21262d;
+  --color-border: #30363d;
+  --color-muted: #484f58;
 }
 
 :root {
-  --background: #0a0a0a;
-  --foreground: #ededed;
-  --accent: #f59e0b;
-  --accent-dim: #d97706;
-  --surface: #141414;
-  --surface-hover: #1f1f1f;
-  --border: #2a2a2a;
+  --background: #0d1117;
+  --foreground: #c9d1d9;
+  --accent: #58a6ff;
+  --green: #3fb950;
+  --amber: #d29922;
+  --red: #f85149;
+  --surface: #161b22;
+  --surface-hover: #21262d;
+  --border: #30363d;
+  --muted: #484f58;
+}
+
+* {
+  box-sizing: border-box;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: system-ui, -apple-system, sans-serif;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 14px;
+  line-height: 1.6;
 }
 
-/* Markdown styling */
+/* Blinking cursor animation */
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+.cursor-blink::after {
+  content: '▊';
+  animation: blink 1s step-end infinite;
+  color: var(--green);
+  margin-left: 2px;
+}
+
+/* Scanlines effect (subtle) */
+.scanlines::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0.03),
+    rgba(0, 0, 0, 0.03) 1px,
+    transparent 1px,
+    transparent 2px
+  );
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* Terminal box with box-drawing characters */
+.terminal-box {
+  border: 1px solid var(--border);
+  position: relative;
+}
+
+.terminal-box::before {
+  content: '┌' attr(data-title) '─';
+  position: absolute;
+  top: -1px;
+  left: -1px;
+  color: var(--muted);
+  background: var(--background);
+  padding: 0 4px;
+  font-size: 12px;
+}
+
+/* Status badges - terminal style */
+.status-badge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.status-pending {
+  color: var(--amber);
+}
+
+.status-approved {
+  color: var(--green);
+}
+
+.status-rejected {
+  color: var(--red);
+}
+
+.status-merged {
+  color: var(--accent);
+}
+
+/* Terminal prompt style */
+.prompt::before {
+  content: '>';
+  color: var(--green);
+  margin-right: 8px;
+}
+
+/* Selection highlight */
+::selection {
+  background: var(--accent);
+  color: var(--background);
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--background);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 0;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
+}
+
+/* Form elements */
+select, input, textarea {
+  font-family: 'JetBrains Mono', monospace;
+  background: var(--background);
+  border: 1px solid var(--border);
+  color: var(--foreground);
+  font-size: 13px;
+}
+
+select:focus, input:focus, textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+select option {
+  background: var(--surface);
+}
+
+/* Buttons */
+button {
+  font-family: 'JetBrains Mono', monospace;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Links */
+a {
+  color: var(--accent);
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+a:hover {
+  color: var(--green);
+  text-decoration: underline;
+}
+
+/* Code blocks */
+pre, code {
+  font-family: 'JetBrains Mono', monospace;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+pre {
+  padding: 16px;
+  overflow-x: auto;
+}
+
+code {
+  padding: 2px 6px;
+  font-size: 13px;
+}
+
+pre code {
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+/* ASCII border utilities */
+.border-ascii {
+  border: 1px solid var(--border);
+}
+
+.border-ascii-top::before {
+  content: '┌────────────────────────────────────────────────────────────────────────────────┐';
+  display: block;
+  color: var(--muted);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.border-ascii-bottom::after {
+  content: '└────────────────────────────────────────────────────────────────────────────────┘';
+  display: block;
+  color: var(--muted);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+/* Glow effect for interactive elements */
+.glow-green:hover {
+  box-shadow: 0 0 10px rgba(63, 185, 80, 0.3);
+}
+
+.glow-blue:hover {
+  box-shadow: 0 0 10px rgba(88, 166, 255, 0.3);
+}
+
+.glow-red:hover {
+  box-shadow: 0 0 10px rgba(248, 81, 73, 0.3);
+}
+
+/* Loading animation */
+@keyframes loading {
+  0% { content: '⠋'; }
+  10% { content: '⠙'; }
+  20% { content: '⠹'; }
+  30% { content: '⠸'; }
+  40% { content: '⠼'; }
+  50% { content: '⠴'; }
+  60% { content: '⠦'; }
+  70% { content: '⠧'; }
+  80% { content: '⠇'; }
+  90% { content: '⠏'; }
+}
+
+.loading::before {
+  content: '⠋';
+  animation: loading 1s steps(1) infinite;
+  margin-right: 8px;
+}
+
+/* Markdown / Prose styling */
 .prose {
   color: var(--foreground);
 }
@@ -38,29 +275,13 @@ body {
   margin-bottom: 0.5em;
 }
 
-.prose h1 { font-size: 1.5rem; }
-.prose h2 { font-size: 1.25rem; border-bottom: 1px solid var(--border); padding-bottom: 0.25rem; }
-.prose h3 { font-size: 1.1rem; }
-
-.prose code {
-  background: var(--surface);
-  padding: 0.125rem 0.375rem;
-  border-radius: 0.25rem;
-  font-size: 0.875rem;
+.prose h1 { font-size: 1.25rem; }
+.prose h2 {
+  font-size: 1.1rem;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.25rem;
 }
-
-.prose pre {
-  background: var(--surface);
-  padding: 1rem;
-  border-radius: 0.5rem;
-  overflow-x: auto;
-  margin: 1rem 0;
-}
-
-.prose pre code {
-  background: none;
-  padding: 0;
-}
+.prose h3 { font-size: 1rem; }
 
 .prose ul, .prose ol {
   padding-left: 1.5rem;
@@ -71,16 +292,15 @@ body {
   margin: 0.25rem 0;
 }
 
-.prose a {
-  color: var(--accent);
-  text-decoration: underline;
+.prose li::marker {
+  color: var(--muted);
 }
 
 .prose blockquote {
-  border-left: 3px solid var(--accent);
+  border-left: 2px solid var(--green);
   padding-left: 1rem;
   margin: 1rem 0;
-  color: #888;
+  color: var(--muted);
 }
 
 .prose table {
@@ -97,4 +317,5 @@ body {
 
 .prose th {
   background: var(--surface);
+  color: var(--green);
 }
